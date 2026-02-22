@@ -1,0 +1,10 @@
+{
+  "name": "makemit2026",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --names \"worker,server\" --prefix-colors \"cyan,green\" \"cd worker && wrangler dev\" \"cd lidar-receiver && bun run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
