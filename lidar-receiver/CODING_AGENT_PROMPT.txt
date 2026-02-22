@@ -1,0 +1,236 @@
+PROMPT FOR CODING AGENT - REACT NATIVE LIDAR INTEGRATION
+===========================================================
+
+Implement LiDAR scanning in our React Native app that sends point cloud data to a WebSocket server.
+
+## Requirements
+
+1. Connect to WebSocket server at ws://[SERVER_IP]:8080
+2. Authenticate using API key in query parameter
+3. Capture LiDAR point cloud data from iPhone
+4. Encode with MessagePack
+5. Send scans to server
+6. Handle acknowledgments and errors
+7. Support start/stop scanning
+8. Display connection status and scan count
+
+## Server API Specification
+
+### Connection
+- URL: `ws://[SERVER_IP]:8080?apiKey=[YOUR_API_KEY]`
+- Headers: `x-device-id: [unique-device-id]`
+- Protocol: WebSocket with MessagePack encoding
+
+### Data Format (MessagePack encoded)
+
+```typescript
+interface LiDARPoint {
+  x: number;
+  y: number;
+  z: number;
+  intensity?: number;  // 0-1 reflectance
+}
+
+interface LiDARScan {
+  scanId: string;          // UUID
+  sessionId: string;       // UUID (same for all scans in session)
+  deviceId: string;        // Device identifier
+  timestamp: number;       // Unix timestamp in milliseconds
+  points: LiDARPoint[];    // Array of 3D points
+  metadata?: {
+    orientation?: {
+      pitch: number;
+      roll: number;
+      yaw: number;
+    };
+    location?: {
+      latitude: number;
+      longitude: number;
+      altitude?: number;
+    };
+    confidence?: number;   // 0-1 quality metric
+  };
+}
+```
+
+### Server Responses (JSON)
+
+```typescript
+// Acknowledgment
+{
+  type: 'ack',
+  data: {
+    scanId: string,
+    received: number,      // Server timestamp
+    stored: boolean        // true if saved, false if dropped
+  }
+}
+
+// Error
+{
+  type: 'error',
+  error: string
+}
+```
+
+## Required Dependencies
+
+```bash
+npm install @msgpack/msgpack uuid react-native-device-info
+```
+
+## Implementation Structure
+
+### 1. Create Types (`types/lidar.ts`)
+Define all TypeScript interfaces above
+
+### 2. Create LiDAR Service (`services/LiDARService.ts`)
+
+**Class: LiDARService**
+
+Properties:
+- ws: WebSocket connection
+- sessionId: string (UUID)
+- config: { serverUrl, apiKey, deviceId }
+- connected: boolean
+- Callbacks: onConnect, onDisconnect, onError, onAck
+
+Methods:
+- connect(): Promise<void> - Establish WebSocket connection
+- disconnect(): void - Close connection
+- sendScan(points, metadata?): Promise<boolean> - Encode and send scan
+- isConnected(): boolean
+- getSessionId(): string
+- newSession(): void - Generate new session UUID
+
+Implementation details:
+- Use MessagePack encode() before sending
+- Handle reconnection with exponential backoff (max 5 attempts)
+- Parse JSON responses for acks/errors
+- WebSocket URL format: `${serverUrl}?apiKey=${apiKey}`
+- Add header: `x-device-id: ${deviceId}`
+
+### 3. Create Hook (`hooks/useLiDAR.ts`)
+
+**Hook: useLiDAR(options)**
+
+Options:
+- serverUrl: string
+- apiKey: string
+- autoConnect?: boolean
+
+Returns:
+- connected: boolean
+- scanning: boolean
+- scanCount: number
+- lastAck: AckMessage | null
+- connect(): Promise<void>
+- disconnect(): void
+- sendScan(points, metadata?): Promise<boolean>
+- startScanning(): void
+- stopScanning(): void
+- newSession(): void
+
+Implementation:
+- Initialize LiDARService in useEffect
+- Auto-connect if option enabled
+- Update state on service callbacks
+- Cleanup on unmount
+
+### 4. Create Component (`components/LiDARScanner.tsx`)
+
+**Component: LiDARScanner**
+
+Features:
+- Display connection status (✓/✗)
+- Show scan count
+- Show last acknowledgment
+- Buttons: Connect, Start/Stop Scanning, New Session, Disconnect
+- Capture LiDAR frames at 100ms interval (10 Hz) when scanning
+- Send each frame via useLiDAR.sendScan()
+
+UI Elements:
+- Title: "LiDAR Scanner"
+- Status section with connected state, scan count, last ack
+- Button group for controls
+- Use StyleSheet for styling
+
+### 5. LiDAR Frame Capture
+
+NOTE: You'll need to integrate with ARKit or similar for real LiDAR capture.
+
+For now, create a placeholder:
+```typescript
+function captureLiDARFrame(): LiDARPoint[] {
+  // TODO: Replace with actual ARKit integration
+  // For testing, you can generate mock data
+  return [];
+}
+```
+
+Later integration options:
+- react-native-arkit
+- react-native-vision-camera with frame processors
+- Custom native module
+
+## Configuration
+
+**Server URL**: Get from environment or allow user input
+**API Key**: From setup script output (starts with generated key)
+**Device ID**: Use react-native-device-info's getUniqueId()
+
+## Error Handling
+
+- Connection errors: Display alert, attempt reconnect
+- Authentication errors: Show "Invalid API key" message
+- Server errors: Log and display to user
+- Dropped scans (stored: false): Warn and potentially slow scan rate
+
+## Testing Strategy
+
+1. Create mock data generator for testing without LiDAR
+2. Test connection to local server first
+3. Verify MessagePack encoding
+4. Check acknowledgments are received
+5. Test reconnection logic
+6. Test with real LiDAR data (500-1000 points per scan)
+
+## Performance Requirements
+
+- Maximum 30 scans/second (recommended: 10-20)
+- Handle backpressure (server may drop scans if overloaded)
+- Monitor ack.stored field - if false, reduce scan rate
+- Keep latency under 100ms for good UX
+
+## Example Usage
+
+```typescript
+function App() {
+  const lidar = useLiDAR({
+    serverUrl: 'ws://192.168.1.100:8080',
+    apiKey: 'your-api-key-here',
+    autoConnect: true,
+  });
+
+  return <LiDARScanner />;
+}
+```
+
+## Deliverables
+
+1. ✅ All type definitions
+2. ✅ LiDARService class with full functionality
+3. ✅ useLiDAR hook
+4. ✅ LiDARScanner component
+5. ✅ Mock data generator for testing
+6. ✅ Error handling throughout
+7. ✅ Documentation comments in code
+
+## Notes
+
+- Server expects binary MessagePack, not JSON
+- SessionId groups related scans together
+- ScanId must be unique per scan
+- Device orientation and location are optional but recommended
+- Server runs on Raspberry Pi or laptop for development
+- Test with mock data before integrating real LiDAR capture

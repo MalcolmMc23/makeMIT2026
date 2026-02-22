@@ -1,0 +1,40 @@
+[Unit]
+Description=LiDAR Receiver WebSocket Server
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/lidar-receiver
+
+# Environment
+Environment="NODE_ENV=production"
+EnvironmentFile=/home/pi/lidar-receiver/.env
+
+# Execute
+ExecStart=/home/pi/.bun/bin/bun /home/pi/lidar-receiver/src/index.ts
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=200
+StartLimitBurst=3
+
+# Resource limits
+MemoryMax=2G
+MemoryHigh=1.5G
+CPUQuota=75%
+
+# Logging
+StandardOutput=append:/home/pi/lidar-receiver/logs/stdout.log
+StandardError=append:/home/pi/lidar-receiver/logs/stderr.log
+SyslogIdentifier=lidar-receiver
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
